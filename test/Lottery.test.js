@@ -43,7 +43,6 @@ const { abi, evm } = require('../compile');
 let accounts;
 let lottery;
 
-
 beforeEach(async () => {
   accounts = await web3.eth.getAccounts();
   lottery = await new web3.eth.Contract(abi)
@@ -65,69 +64,76 @@ describe('Lottery Contract', () => {
   });
 
   it('participant entry', async () => {
-    await lottery.methods.entry().send({ from: accounts[1], value: '1000000000000000000', gas: '1000000' });
+    await lottery.methods.entry().send({ from: accounts[1], value: web3.utils.toWei('1', 'ether'), gas: '1000000' });
     const participants = await lottery.methods.participants(0).call({ from: accounts[1] });
     const sentAmounts = await lottery.methods.sentAmounts(0).call({ from: accounts[1] });
     assert.equal(participants, accounts[1]);
-    assert.equal(sentAmounts, '1000000000000000000');
+    assert.equal(sentAmounts, web3.utils.toWei('1', 'ether'));
   });
 
   it('sorts participants by amounts', async () => {
     const entryData = [
-      { account: accounts[1], value: '1000000000000000000' },
-      { account: accounts[2], value: '2000000000000000000' },
-      { account: accounts[3], value: '5000000000000000000' },
+      { account: accounts[1], value: web3.utils.toWei('1', 'ether') },
+      { account: accounts[2], value: web3.utils.toWei('2', 'ether') },
+      { account: accounts[3], value: web3.utils.toWei('5', 'ether') },
     ];
-  
+
     for (const { account, value } of entryData) {
       await lottery.methods.entry().send({ from: account, value: value, gas: '1000000' });
     }
-  
+
     await lottery.methods.sortParticipantsByAmounts().send({ from: accounts[1] });
-  
+
     const participants = [];
     const amounts = [];
-  
+
     for (let i = 0; i < entryData.length; i++) {
       const participant = await lottery.methods.participants(i).call({ from: accounts[1] });
       const amount = await lottery.methods.sentAmounts(i).call({ from: accounts[1] });
       participants.push(participant);
       amounts.push(amount);
     }
-  
+
     const expectedData = [
-      { participant: accounts[3], amount: '5000000000000000000' },
-      { participant: accounts[2], amount: '2000000000000000000' },
-      { participant: accounts[1], amount: '1000000000000000000' },
+      { participant: accounts[3], amount: web3.utils.toWei('5', 'ether') },
+      { participant: accounts[2], amount: web3.utils.toWei('2', 'ether') },
+      { participant: accounts[1], amount: web3.utils.toWei('1', 'ether') },
     ];
-  
+
     for (let i = 0; i < expectedData.length; i++) {
       assert.equal(participants[i], expectedData[i].participant);
       assert.equal(amounts[i], expectedData[i].amount);
     }
   });
 
-  it('requires a minimum amount of ether to enter', async() =>{
-    try{
-      await lottery.methods.entry().send({ from: accounts[1], value: '100000000000', gas: '1000000' });
+  it('requires a minimum amount of ether to enter', async () => {
+    try {
+      await lottery.methods.entry().send({ from: accounts[1], value: web3.utils.toWei('0.0001', 'ether'), gas: '1000000' });
       assert(false);
-   }
-    
-   catch(err){
+    } catch (err) {
       assert(err);
-   } 
+    }
   });
 
-  it('only manager can pick the winner', async() =>{
-    try{
-      await lottery.methods.pickWinner().send({ from: accounts[1]});
+  it('only manager can pick the winner', async () => {
+    try {
+      await lottery.methods.pickWinner().send({ from: accounts[1] });
       assert(false);
-   }
-    
-   catch(err){
+    } catch (err) {
       assert(err);
-   } 
+    }
   });
-  
-  
+
+  it('sends money to the winner and resets the array', async () => {
+    // Add participants
+    await lottery.methods.entry().send({ from: accounts[0], value: web3.utils.toWei('2', 'ether'), gas: '1000000' });
+    const initialBalance = await web3.eth.getBalance(accounts[0]);
+    await lottery.methods.pickWinner().send({from: accounts[0]});
+    const finalBalance = await web3.eth.getBalance(accounts[0]);
+    const difference = finalBalance - initialBalance;
+
+    assert.ok(difference > web3.utils.toWei('1.9', 'ether'), 'The difference is not greater than 1.5 ether');
 });
+
+});
+
